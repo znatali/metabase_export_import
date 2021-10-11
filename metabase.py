@@ -24,7 +24,7 @@ class MetabaseApi:
         if json_data is not None:
             json_str = json.dumps(json_data)
         
-        headers =  { "Content-Type": "application/json;charset=utf-8" }
+        headers = { "Content-Type": "application/json;charset=utf-8" }
         
         if self.metabase_session is not None:
             headers["X-Metabase-Session"] = self.metabase_session
@@ -317,8 +317,8 @@ class MetabaseApi:
         self.create_session_if_needed()
         return self.query('GET', 'collection')
 
-    def get_dashboard(self, database_name, dashboard_name):
-        dashboard_id = self.dashboard_name2id(dashboard_name, dashboard_name)
+    def get_dashboard(self, dashboard_name):
+        dashboard_id = self.dashboard_name2id(dashboard_name)
         return self.query('GET', 'dashboard/'+str(dashboard_id))
 
     def get_dashboards(self, database_name):
@@ -346,7 +346,7 @@ class MetabaseApi:
                 metrics.append(m)
         return metrics
 
-    def dashboard_name2id(self, database_name, dashboard_name):
+    def dashboard_name2id(self, dashboard_name):
         if not self.dashboards_name2id:
             self.dashboards_name2id = {}
             for d in self.query('GET', 'dashboard'):
@@ -354,7 +354,7 @@ class MetabaseApi:
         return self.dashboards_name2id.get(dashboard_name)
 
     def dashboard_id2name(self, database_name, dashboard_id):
-        self.dashboard_name2id(database_name, "a")
+        self.dashboard_name2id(database_name)
         for dname in self.dashboards_name2id.keys():
             if self.dashboards_name2id[dname] == dashboard_id:
                 return dname
@@ -382,10 +382,11 @@ class MetabaseApi:
         cid = self.collection_name2id(collection_name)
         if cid:
             return cid
-        self.create_collection(collection_name)
-        return self.collection_name2id(collection_name)
+        result = self.create_collection(collection_name)
+        if result:
+            return self.collection_name2id(collection_name)
 
-    def create_collection(self, collection_name, parent_collection_name = None, param_args = {}):
+    def create_collection(self, collection_name, parent_collection_name = None, param_args = {}):  # TODO for Natali it's update collection now
         self.create_session_if_needed()
         param = param_args.copy()
         param['name'] = collection_name
@@ -400,7 +401,6 @@ class MetabaseApi:
         self.collections_name2id = {}
         if cid:
             return self.query('PUT', 'collection/'+str(cid), param)
-        return self.query('POST', 'collection', param)
 
     def convert_pcnames2id(self, database_name, collection_name, fieldname, pcnames):
         if pcnames[0] != '%':
@@ -415,11 +415,11 @@ class MetabaseApi:
         if fieldname == 'database_name':
             return [new_k, self.database_name2id(database_name)]
         if fieldname == 'collection_name':
-            return [new_k, self.collection_name2id_or_create_it(collection_name)]
+            return [new_k, self.collection_name2id_or_create_it(collection_name)]   # TODO for Natali if None
         if fieldname == 'card_name':
             return [new_k, self.card_name2id(database_name, names)]
         if fieldname == 'dashboard_name':
-            return [new_k, self.dashboard_name2id(database_name, names)]
+            return [new_k, self.dashboard_name2id(names)]
         if fieldname == 'pseudo_table_card_name':
             card_id = self.card_name2id(database_name, names)
             if not card_id:
@@ -550,7 +550,10 @@ class MetabaseApi:
                         obj_res['collection_name'] = '%'+k+'%'
                     elif k == 'dashboard_id':
                         id = obj_res.pop(k)
-                        obj_res['dashboard_name'] = '%'+k+'%'+self.dashboard_id2name(database_name, id)
+                        dashboard_id2name = self.dashboard_id2name(database_name, id)
+                        if not dashboard_id2name:
+                            dashboard_id2name = 'unknown_dashboard'
+                        obj_res['dashboard_name'] = '%' + k + '%' + dashboard_id2name
         return obj_res
 
     def export_dashboards_to_json(self, database_name, filename):
@@ -568,8 +571,8 @@ class MetabaseApi:
         with open(filename, 'w', newline = '') as jsonfile:
             jsonfile.write(json.dumps(self.convert_ids2names(database_name, export, None)))
 
-    def dashboard_import(self, database_name, dash_from_json):
-        dashid = self.dashboard_name2id(database_name, dash_from_json['name'])
+    def dashboard_import(self, dash_from_json):
+        dashid = self.dashboard_name2id(dash_from_json['name'])
         if dashid:
             return self.query('PUT', 'dashboard/'+str(dashid), dash_from_json)
         self.dashboards_name2id = None
@@ -592,15 +595,15 @@ class MetabaseApi:
         self.metrics_name2id = {}
         return self.query('POST', 'metric', metric_from_json)
 
-    def dashboard_delete_all_cards(self, database_name, dashboard_name):
-        dash = self.get_dashboard(database_name, dashboard_name)
+    def dashboard_delete_all_cards(self, dashboard_name):
+        dash = self.get_dashboard(dashboard_name)
         res = []
         for c in dash['ordered_cards']:
             res.append(self.query('DELETE', 'dashboard/'+str(dash['id'])+'/cards?dashcardId='+str(c['id'])))
         return res
 
-    def dashboard_import_card(self, database_name, dashboard_name, ordered_card_from_json):
-        dashid = self.dashboard_name2id(database_name, dashboard_name)
+    def dashboard_import_card(self, dashboard_name, ordered_card_from_json):
+        dashid = self.dashboard_name2id(dashboard_name)
         cardid = ordered_card_from_json.get('card_id')
         if cardid:
             ordered_card_from_json['cardId'] = cardid
@@ -646,10 +649,10 @@ class MetabaseApi:
         with open(filename, 'r', newline = '') as jsonfile:
             jsondata = self.convert_names2ids(database_name, collection_name, json.load(jsonfile))
             for dash in jsondata:
-                res[0].append(self.dashboard_import(database_name, dash))
-                self.dashboard_delete_all_cards(database_name, dash['name'])
+                res[0].append(self.dashboard_import(dash))
+                self.dashboard_delete_all_cards(dash['name'])
                 for ocard in dash['ordered_cards']:
-                    res[1].append(self.dashboard_import_card(database_name, dash['name'], ocard))
+                    res[1].append(self.dashboard_import_card(dash['name'], ocard))
         return res
 
     def get_users(self):
