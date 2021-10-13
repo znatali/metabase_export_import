@@ -1,9 +1,8 @@
 import requests
 import json
-import csv
-import datetime
 
-class MetabaseApi:
+
+class MetabaseApiInterface:
     def __init__(self, apiurl, username, password, debug=False):
         self.apiurl = apiurl
         self.username = username
@@ -18,13 +17,15 @@ class MetabaseApi:
         self.cards_name2id = {}
         self.collections_name2id = {}
         self.metrics_name2id = {}
+
+        self.collection_id = None
         
-    def query (self, method, query_name, json_data = None):
+    def query(self, method, query_name, json_data = None):
         json_str = None
         if json_data is not None:
             json_str = json.dumps(json_data)
         
-        headers =  { "Content-Type": "application/json;charset=utf-8" }
+        headers = { "Content-Type": "application/json;charset=utf-8" }
         
         if self.metabase_session is not None:
             headers["X-Metabase-Session"] = self.metabase_session
@@ -203,7 +204,7 @@ class MetabaseApi:
                 return metric['name']
         return ''
 
-    def field_tablenameandfieldname2field(self, database_name, table_name, field_name):
+    def get_api_field(self, database_name, table_name, field_name):
         if self.database_export is None:
             self.database_export = self.get_database(database_name, True)
         if not table_name or not field_name:
@@ -229,51 +230,6 @@ class MetabaseApi:
                 return table['id']
         return None
 
-    def export_fields(self, database_name):
-        self.database_export = self.get_database(database_name, True)
-        result = []
-        if not self.database_export.get('tables'):
-            return None
-        for table in self.database_export['tables']:
-            table_name = table['name']
-            for field in table['fields']:
-                field_id = field['fk_target_field_id']
-                [fk_table, fk_field] = self.field_id2tablenameandfieldname(database_name, field_id)
-                if not field['semantic_type']:
-                    field['semantic_type'] = ''
-                if not field['custom_position']:
-                    field['custom_position'] = ''
-                result.append({
-                                'table_name': table_name, 'field_name': field['name'], 'description': field['description'],
-                                'semantic_type': field['semantic_type'],
-                                'foreign_table': fk_table, 'foreign_field': fk_field,
-                                'visibility_type': field['visibility_type'], 'has_field_values': field['has_field_values'],
-                                'custom_position': field['custom_position'], 'effective_type': field['effective_type'],
-                                'base_type': field['base_type'], 'database_type': field['database_type'], 'field_id': field['id']
-                              })
-        return result
-
-    def export_fields_to_csv(self, database_name, filename):
-        export = self.export_fields(database_name)
-        if not export:
-            return
-        with open(filename, 'w', newline = '') as csvfile:
-            my_writer = csv.writer(csvfile, delimiter = ',')
-            need_header = True
-            for row in export:
-                if need_header:
-                    my_writer.writerow(row.keys())
-                    need_header = False
-                my_writer.writerow(row.values())
-
-    def import_fields_from_csv(self, database_name, filename):
-        fields = []
-        with open(filename, newline='') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                fields.append(row)
-        return self.update_fields(database_name, fields)
-
     def update_fields(self, database_name, fields):
         output = []
         for f in fields:
@@ -281,10 +237,10 @@ class MetabaseApi:
         return output
 
     def update_field(self, database_name, field):
-        field_from_api = self.field_tablenameandfieldname2field(database_name, field['table_name'], field['field_name'])
+        field_from_api = self.get_api_field(database_name, field['table_name'], field['field_name'])
         if not field_from_api:
             return None
-        fk = self.field_tablenameandfieldname2field(database_name, field['foreign_table'], field['foreign_field'])
+        fk = self.get_api_field(database_name, field['foreign_table'], field['foreign_field'])
         field.pop('foreign_table')
         field.pop('foreign_field')
         data = {'id': str(field_from_api['id'])}
@@ -293,7 +249,7 @@ class MetabaseApi:
                 data[k] = field[k]
             else:
                 data[k] = None
-        if fk :
+        if fk:
             data['fk_target_field_id'] = fk['id']
         return self.query('PUT', 'field/'+data['id'], data)
 
@@ -317,8 +273,8 @@ class MetabaseApi:
         self.create_session_if_needed()
         return self.query('GET', 'collection')
 
-    def get_dashboard(self, database_name, dashboard_name):
-        dashboard_id = self.dashboard_name2id(dashboard_name, dashboard_name)
+    def get_dashboard(self, dashboard_name):
+        dashboard_id = self.dashboard_name2id(dashboard_name)
         return self.query('GET', 'dashboard/'+str(dashboard_id))
 
     def get_dashboards(self, database_name):
@@ -346,7 +302,7 @@ class MetabaseApi:
                 metrics.append(m)
         return metrics
 
-    def dashboard_name2id(self, database_name, dashboard_name):
+    def dashboard_name2id(self, dashboard_name):
         if not self.dashboards_name2id:
             self.dashboards_name2id = {}
             for d in self.query('GET', 'dashboard'):
@@ -354,7 +310,7 @@ class MetabaseApi:
         return self.dashboards_name2id.get(dashboard_name)
 
     def dashboard_id2name(self, database_name, dashboard_id):
-        self.dashboard_name2id(database_name, "a")
+        self.dashboard_name2id(database_name)
         for dname in self.dashboards_name2id.keys():
             if self.dashboards_name2id[dname] == dashboard_id:
                 return dname
@@ -382,10 +338,11 @@ class MetabaseApi:
         cid = self.collection_name2id(collection_name)
         if cid:
             return cid
-        self.create_collection(collection_name)
-        return self.collection_name2id(collection_name)
+        result = self.create_collection(collection_name)
+        if result:
+            return self.collection_name2id(collection_name)
 
-    def create_collection(self, collection_name, parent_collection_name = None, param_args = {}):
+    def create_collection(self, collection_name, parent_collection_name = None, param_args = {}):  # TODO for Natali it's update collection now
         self.create_session_if_needed()
         param = param_args.copy()
         param['name'] = collection_name
@@ -400,7 +357,22 @@ class MetabaseApi:
         self.collections_name2id = {}
         if cid:
             return self.query('PUT', 'collection/'+str(cid), param)
-        return self.query('POST', 'collection', param)
+
+    def create_update_root_collection(self, collection_name, param_args={}):
+        self.create_session_if_needed()
+        all_collection = self.query('GET', 'collection/')
+        for row_collection in all_collection:
+            if row_collection['name'] == collection_name:
+                self.collection_id = row_collection['id']
+        if not self.collection_id:
+            param = param_args.copy()
+            param['name'] = collection_name
+            param['parent_id'] = None
+            param['color'] = '#509ee3'
+            param['description'] = None
+            param['namespace'] = None
+            result = self.query('POST', 'collection/', param)
+            self.collection_id = result['id']
 
     def convert_pcnames2id(self, database_name, collection_name, fieldname, pcnames):
         if pcnames[0] != '%':
@@ -410,16 +382,16 @@ class MetabaseApi:
             raise ValueError('Not a convertible value')
         [new_k, names] = pcnames[1:sep], pcnames[sep+1:]
         if new_k == 'JSONCONV':
-            data = self.convert_names2ids(database_name, collection_name, json.loads(names))
+            data = self.map_names_ids(database_name, collection_name, json.loads(names))
             return [json.dumps(data), None]
         if fieldname == 'database_name':
             return [new_k, self.database_name2id(database_name)]
         if fieldname == 'collection_name':
-            return [new_k, self.collection_name2id_or_create_it(collection_name)]
+            return [new_k, self.collection_name2id_or_create_it(collection_name)]   # TODO for Natali if None
         if fieldname == 'card_name':
             return [new_k, self.card_name2id(database_name, names)]
         if fieldname == 'dashboard_name':
-            return [new_k, self.dashboard_name2id(database_name, names)]
+            return [new_k, self.dashboard_name2id(names)]
         if fieldname == 'pseudo_table_card_name':
             card_id = self.card_name2id(database_name, names)
             if not card_id:
@@ -432,16 +404,16 @@ class MetabaseApi:
                 return[new_k, metricid]
             raise ValueError('metric not found: '+resplit[2])
         if len(resplit) == 2:
-            field = self.field_tablenameandfieldname2field(database_name, resplit[0], resplit[1])
+            field = self.get_api_field(database_name, resplit[0], resplit[1])
             if field:
                 return[new_k, field['id']]
-            raise ValueError('field not found: '+resplit[0]+'/'+resplit[1])
+            raise ValueError('field13444 not found: '+resplit[0]+'/'+resplit[1])
         if len(resplit) == 1:
             table_id = self.table_name2id(database_name, resplit[0])
             return [new_k, table_id]
         raise ValueError('Unknown '+str(fieldname)+' %'+str(new_k)+'% type')
 
-    def convert_names2ids(self, database_name, collection_name, obj):
+    def map_names_ids(self, database_name, collection_name, obj):
         obj_res = obj
         if isinstance(obj, list):
             if len(obj) and obj[0] in ['field', 'metric']:
@@ -450,7 +422,7 @@ class MetabaseApi:
                     obj_res[1] = value
             else:
                 for i in range(len(obj)):
-                    obj_res[i] = self.convert_names2ids(database_name, collection_name, obj[i])
+                    obj_res[i] = self.map_names_ids(database_name, collection_name, obj[i])
         elif isinstance(obj, dict):
             obj_res = obj.copy()
             for k in obj.keys():
@@ -458,7 +430,7 @@ class MetabaseApi:
                     try:
                         [new_k, value] = self.convert_pcnames2id(database_name, collection_name, None, k)
                         obj_res.pop(k)
-                        obj_res[new_k] = self.convert_names2ids(database_name, collection_name, obj[k])
+                        obj_res[new_k] = self.map_names_ids(database_name, collection_name, obj[k])
                     except ValueError:
                         obj_res[k] = obj[k]
                 elif k in ['field_name', 'table_name', 'database_name', 'card_name', 'pseudo_table_card_name', 'dashboard_name', 'collection_name'] and obj[k][0] == '%':
@@ -467,7 +439,7 @@ class MetabaseApi:
                     obj_res[new_k] = value
                 else:
                     if isinstance(obj[k], dict) or isinstance(obj[k], list):
-                        obj_res[k] = self.convert_names2ids(database_name, collection_name, obj[k])
+                        obj_res[k] = self.map_names_ids(database_name, collection_name, obj[k])
         return obj_res
 
     def convert_ids2names(self, database_name, obj, previous_key):
@@ -550,107 +522,25 @@ class MetabaseApi:
                         obj_res['collection_name'] = '%'+k+'%'
                     elif k == 'dashboard_id':
                         id = obj_res.pop(k)
-                        obj_res['dashboard_name'] = '%'+k+'%'+self.dashboard_id2name(database_name, id)
+                        dashboard_id2name = self.dashboard_id2name(database_name, id)
+                        if dashboard_id2name:
+                            obj_res['dashboard_name'] = '%' + k + '%' + dashboard_id2name
         return obj_res
 
-    def export_dashboards_to_json(self, database_name, filename):
-        export = self.get_dashboards(database_name)
-        with open(filename, 'w', newline = '') as jsonfile:
-            jsonfile.write(json.dumps(self.convert_ids2names(database_name, export, None)))
-
-    def export_cards_to_json(self, database_name, filename):
-        export = self.get_cards(database_name)
-        with open(filename, 'w', newline = '') as jsonfile:
-            jsonfile.write(json.dumps(self.convert_ids2names(database_name, export, None)))
-
-    def export_metrics_to_json(self, database_name, filename):
-        export = self.get_metrics(database_name)
-        with open(filename, 'w', newline = '') as jsonfile:
-            jsonfile.write(json.dumps(self.convert_ids2names(database_name, export, None)))
-
-    def dashboard_import(self, database_name, dash_from_json):
-        dashid = self.dashboard_name2id(database_name, dash_from_json['name'])
-        if dashid:
-            return self.query('PUT', 'dashboard/'+str(dashid), dash_from_json)
-        self.dashboards_name2id = None
-        return self.query('POST', 'dashboard', dash_from_json)
-
-    def card_import(self, database_name, card_from_json):
-        if not card_from_json.get('description'):
-            card_from_json['description'] = None
-        cardid = self.card_name2id(database_name, card_from_json['name'])
-        if cardid:
-            return self.query('PUT', 'card/'+str(cardid), card_from_json)
-        self.cards_name2id = {}
-        return self.query('POST', 'card', card_from_json)
-
-    def metric_import(self, database_name, metric_from_json):
-        metricid = self.metric_name2id(database_name, metric_from_json['name'])
-        metric_from_json['revision_message'] = "Import du "+datetime.datetime.now().isoformat()
-        if metricid:
-            return self.query('PUT', 'metric/'+str(metricid), metric_from_json)
-        self.metrics_name2id = {}
-        return self.query('POST', 'metric', metric_from_json)
-
-    def dashboard_delete_all_cards(self, database_name, dashboard_name):
-        dash = self.get_dashboard(database_name, dashboard_name)
+    def dashboard_delete_all_cards(self, dashboard_name):
+        dash = self.get_dashboard(dashboard_name)
         res = []
         for c in dash['ordered_cards']:
             res.append(self.query('DELETE', 'dashboard/'+str(dash['id'])+'/cards?dashcardId='+str(c['id'])))
         return res
 
-    def dashboard_import_card(self, database_name, dashboard_name, ordered_card_from_json):
-        dashid = self.dashboard_name2id(database_name, dashboard_name)
+    def dashboard_import_card(self, dashboard_name, ordered_card_from_json):
+        dashid = self.dashboard_name2id(dashboard_name)
         cardid = ordered_card_from_json.get('card_id')
         if cardid:
             ordered_card_from_json['cardId'] = cardid
             ordered_card_from_json.pop('card')
         return self.query('POST', 'dashboard/'+str(dashid)+'/cards', ordered_card_from_json)
-
-    def import_cards_from_json(self, database_name, filename, collection_name = None):
-        res = []
-        with open(filename, 'r', newline = '') as jsonfile:
-            jsondata = json.load(jsonfile)
-            errors = None
-            for card in jsondata:
-                try:
-                    res.append(self.card_import(database_name, self.convert_names2ids(database_name, collection_name, card)))
-                except ValueError as e:
-                    if not errors:
-                        errors = e
-                    else:
-                        errors = ValueError(str(errors) + " / " + str(e))
-            if errors:
-                raise errors
-        return res
-
-    def import_metrics_from_json(self, database_name, filename, collection_name = None):
-        res = []
-        with open(filename, 'r', newline = '') as jsonfile:
-            jsondata = json.load(jsonfile)
-            errors = None
-            for metric in jsondata:
-                try:
-                    res.append(self.metric_import(database_name, self.convert_names2ids(database_name, None, metric)))
-                except ValueError as e:
-                    if not errors:
-                        errors = e
-                    else:
-                        errors = ValueError(str(errors) + " / " + str(e))
-            if errors:
-                raise errors
-        return res
-
-    def import_dashboards_from_json(self, database_name, filename, collection_name = None):
-        res = [[], [], []]
-        with open(filename, 'r', newline = '') as jsonfile:
-            jsondata = self.convert_names2ids(database_name, collection_name, json.load(jsonfile))
-            for dash in jsondata:
-                res[0].append(self.dashboard_import(database_name, dash))
-                self.dashboard_delete_all_cards(database_name, dash['name'])
-                for ocard in dash['ordered_cards']:
-                    res[1].append(self.dashboard_import_card(database_name, dash['name'], ocard))
-        return res
 
     def get_users(self):
         self.create_session_if_needed()
