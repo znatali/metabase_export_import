@@ -2,6 +2,12 @@
 
 This python library allows to export and import a community version instance of Metabase
 
+### Install
+1. Install python 3.8
+
+2. Install requirements with `pip install -r requirements.txt`. 
+
+
 ## Example scripts
 
 Two scripts are provided to import and export fields, cards and dashboards of a specific database configuration of metabase :
@@ -12,7 +18,7 @@ The script produces 3 files for each exported elements (the name of the database
 
     python3 metabase_import.py --url http://localhost:3004/api/ --username my_user --password my_password --db "my database" --collection "my collection"
 
-The script imports from 3 files, one for each elements : `fields.csv`, `cards.json` and `dashboards.json`
+The script imports from 4 files, one for each elements : `fields.csv`, `cards.json`, `dashboards.json`, `metrics.json`
 
 ## Library calls
 
