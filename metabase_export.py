@@ -1,18 +1,22 @@
-import metabase
-import sys
+import argparse
+from exporter.exporter import MetabaseExporter
+from config import FILENAMES_MAP
 
-metabase_apiurl = sys.argv[1]
-metabase_username = sys.argv[2]
-metabase_password = sys.argv[3]
-metabase_base = sys.argv[4]
+parser = argparse.ArgumentParser()
+parser.add_argument('--url', dest='url', required=True)
+parser.add_argument('--username', dest='username', required=True)
+parser.add_argument('--password', dest='password', required=True)
+parser.add_argument('--db', dest='db', required=True)
+parser.add_argument('--collection', dest='collection', required=True)
+options = vars(parser.parse_args())
 
-ametabase = metabase.MetabaseApi(metabase_apiurl, metabase_username, metabase_password)
-#ametabase.debug = True
+metabase_exporter = MetabaseExporter(
+    apiurl=options['url'],
+    username=options['username'],
+    password=options['password'],
+)
 
-#ametabase.delete_database('base')
-#ametabase.create_database('base', 'sqlite', '/path/to/db.sqlite')
-
-ametabase.export_fields_to_csv(metabase_base, metabase_base+'_exported_fields.csv')
-ametabase.export_cards_to_json(metabase_base, metabase_base+'_exported_cards.json')
-ametabase.export_dashboards_to_json(metabase_base, metabase_base+'_exported_dashboard.json')
-ametabase.export_metrics_to_json(metabase_base, metabase_base+'_exported_metrics.json')
+metabase_exporter.export_fields_to_csv(options['db'], FILENAMES_MAP['fields'])
+metabase_exporter.export_cards_to_json(options['db'], FILENAMES_MAP['cards'], options['collection'])
+metabase_exporter.export_dashboards_to_json(options['db'], FILENAMES_MAP['dashboards'])
+metabase_exporter.export_metrics_to_json(options['db'], FILENAMES_MAP['metrics'])

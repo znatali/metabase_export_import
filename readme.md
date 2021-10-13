@@ -6,13 +6,13 @@ This python library allows to export and import a community version instance of 
 
 Two scripts are provided to import and export fields, cards and dashboards of a specific database configuration of metabase :
 
-    python3 metabase_export.py http://localhost:3000/api/ my_user my_password my_database
+    python metabase_export.py --url http://localhost:3000/api/ --username my_user --password my_password --db "my database" --collection "my collection" --files_path "absolute_path_to_folder"
 
-The script produces 3 files for each exported elements (the name of the database is user as prefix) : `my_database_fields_exported.csv`, `my_database_cards_exported.json` and `my_database_dashboard_exported.json`
+The script produces 3 files for each exported elements (the name of the database is user as prefix) : `fields.csv`, `cards.json` and `dashboards.json`
 
-    python3 metabase_import.py http://localhost:3000/api/ my_user my_password my_database
+    python3 metabase_import.py --url http://localhost:3004/api/ --username my_user --password my_password --db "my database" --collection "my collection"
 
-The script imports from 3 files, one for each elements : `my_database_fields_forimport.csv`, `my_database_cards_forimport.json` and `my_database_dashboard_forimport.json`
+The script imports from 3 files, one for each elements : `fields.csv`, `cards.json` and `dashboards.json`
 
 ## Library calls
 
