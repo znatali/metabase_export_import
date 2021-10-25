@@ -19,6 +19,8 @@ class MetabaseApiInterface:
         self.metrics_name2id = {}
 
         self.collection_id = None
+
+        self.map_old_id_dash_names = {}
         
     def query(self, method, query_name, json_data = None):
         json_str = None
@@ -277,18 +279,26 @@ class MetabaseApiInterface:
         dashboard_id = self.dashboard_name2id(dashboard_name)
         return self.query('GET', 'dashboard/'+str(dashboard_id))
 
-    def get_dashboards(self, database_name):
+    def get_dashboards(self, database_name, filter_collection_id=None):
         database_id = self.database_name2id(database_name)
         dashbords_light = self.query('GET', 'dashboard')
         dashboards = []
         for d in dashbords_light:
             res = self.query('GET', 'dashboard/'+str(d['id']))
             good_db = True
+            good_col = True
             for c in res['ordered_cards']:
+                print(c['card'].get('collection_id'))
                 if c['card'].get('database_id') and c['card'].get('database_id') != database_id:
                     good_db = False
                     continue
+                if filter_collection_id:
+                    if c['card'].get('collection_id') and c['card'].get('collection_id') != filter_collection_id or not c['card'].get('collection_id'):
+                        good_col = False
+                        continue
             if not good_db:
+                continue
+            if not good_col:
                 continue
             dashboards.append(res)
         return dashboards
@@ -407,7 +417,7 @@ class MetabaseApiInterface:
             field = self.get_api_field(database_name, resplit[0], resplit[1])
             if field:
                 return[new_k, field['id']]
-            raise ValueError('field13444 not found: '+resplit[0]+'/'+resplit[1])
+            raise ValueError('field not found: '+resplit[0]+'/'+resplit[1])
         if len(resplit) == 1:
             table_id = self.table_name2id(database_name, resplit[0])
             return [new_k, table_id]

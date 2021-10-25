@@ -17,7 +17,12 @@ metabase_importer = MetabaseImporter(
     password=options['password'],
 )
 
+metabase_importer.create_update_collection(options['db'], options['collection'])
+
 metabase_importer.import_fields_from_csv(options['db'], f"{options['path']}/{FILENAMES_MAP['fields']}")
+
 metabase_importer.import_metrics_from_json(options['db'], f"{options['path']}/{FILENAMES_MAP['metrics']}")
+
 metabase_importer.import_cards_from_json(options['db'], f"{options['path']}/{FILENAMES_MAP['cards']}", options['collection'])
-metabase_importer.import_dashboards_from_json(options['db'], f"{options['path']}/{FILENAMES_MAP['dashboards']}")
+
+metabase_importer.import_dashboards_from_json(options['db'], f"{options['path']}/{FILENAMES_MAP['dashboards']}", options['collection'])

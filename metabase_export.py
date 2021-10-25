@@ -18,5 +18,5 @@ metabase_exporter = MetabaseExporter(
 
 metabase_exporter.export_fields_to_csv(options['db'], FILENAMES_MAP['fields'])
 metabase_exporter.export_cards_to_json(options['db'], FILENAMES_MAP['cards'], options['collection'])
-metabase_exporter.export_dashboards_to_json(options['db'], FILENAMES_MAP['dashboards'])
+metabase_exporter.export_dashboards_to_json(options['db'], FILENAMES_MAP['dashboards'], options['collection'])
 metabase_exporter.export_metrics_to_json(options['db'], FILENAMES_MAP['metrics'])
