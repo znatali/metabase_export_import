@@ -23,8 +23,9 @@ class MetabaseExporter(MetabaseApiInterface):
         export = self.get_cards(database_name)
         sorted_export = []
         for card_row in export:
-            if card_row['collection']['name'] == collection_name:
-                sorted_export.append(card_row)
+            if card_row['collection']:
+                if card_row['collection']['name'] == collection_name:
+                    sorted_export.append(card_row)
 
         with open(filename, 'w', newline='') as jsonfile:
             jsonfile.write(json.dumps(self.convert_ids2names(database_name, sorted_export, None)))
@@ -34,10 +35,17 @@ class MetabaseExporter(MetabaseApiInterface):
         with open(filename, 'w', newline = '') as jsonfile:
             jsonfile.write(json.dumps(self.convert_ids2names(database_name, export, None)))
 
-    def export_dashboards_to_json(self, database_name, filename):
-        export = self.get_dashboards(database_name)
-        with open(filename, 'w', newline = '') as jsonfile:
-            jsonfile.write(json.dumps(self.convert_ids2names(database_name, export, None)))
+    def export_dashboards_to_json(self, database_name, filename, collection_name):
+        all_collections = self.get_collections()
+        col_id = None
+        for col in all_collections:
+            if col['name'] == collection_name:
+                col_id = col['id']
+        if col_id:
+            export = self.get_dashboards(database_name, filter_collection_id=col_id)
+            with open(filename, 'w', newline = '') as jsonfile:
+                dash = self.convert_ids2names(database_name, export, None)
+                jsonfile.write(json.dumps(dash))
 
     def export_fields(self, database_name):
         self.database_export = self.get_database(database_name, True)
@@ -54,13 +62,13 @@ class MetabaseExporter(MetabaseApiInterface):
                 if not field['custom_position']:
                     field['custom_position'] = ''
                 result.append({
-                                'table_name': table_name, 'field_name': field['name'], 'description': field['description'],
-                                'semantic_type': field['semantic_type'],
-                                'foreign_table': fk_table, 'foreign_field': fk_field,
-                                'visibility_type': field['visibility_type'], 'has_field_values': field['has_field_values'],
-                                'custom_position': field['custom_position'], 'effective_type': field['effective_type'],
-                                'base_type': field['base_type'], 'database_type': field['database_type'], 'field_id': field['id']
-                              })
+                    'table_name': table_name, 'field_name': field['name'], 'description': field['description'],
+                    'semantic_type': field['semantic_type'],
+                    'foreign_table': fk_table, 'foreign_field': fk_field,
+                    'visibility_type': field['visibility_type'], 'has_field_values': field['has_field_values'],
+                    'custom_position': field['custom_position'], 'effective_type': field['effective_type'],
+                    'base_type': field['base_type'], 'database_type': field['database_type'], 'field_id': field['id']
+                })
         return result
 
 
