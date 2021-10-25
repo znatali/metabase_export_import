@@ -288,7 +288,6 @@ class MetabaseApiInterface:
             good_db = True
             good_col = True
             for c in res['ordered_cards']:
-                print(c['card'].get('collection_id'))
                 if c['card'].get('database_id') and c['card'].get('database_id') != database_id:
                     good_db = False
                     continue
